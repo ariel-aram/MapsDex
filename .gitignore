@@ -12,14 +12,13 @@ build
 
 # log files
 *.log*
+logs/*
+!logs/.gitkeep
 
 # Virtual environment
 venv
 .venv
 .python-version
-
-# Visual Studio code settings
-.vscode
 
 # database
 *sqlite3*
@@ -35,14 +34,12 @@ media
 
 # settings
 config.yml
+config/production.py
+config/extra.toml
 docker-compose.override.yml
 admin_panel/admin_panel/settings/production.py
 
-# confidential data
-data-dump.sql
-*.sql
-list.txt
-roundstats.txt
-stats.txt
-totalstats.txt
-ballsdex/packages/report/reports.json
+# extra package dev
+extra/*
+!extra/.gitkeep
+.gitmodules
