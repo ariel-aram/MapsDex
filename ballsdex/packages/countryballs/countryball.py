@@ -8,14 +8,23 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 import discord
-from discord.ui import Button, TextInput, button
-from django.utils import timezone
+from discord.ui import Button, Modal, TextInput, View, button
+from tortoise.timezone import get_default_timezone
+from tortoise.timezone import now as tortoise_now
 
-from ballsdex.core.discord import Modal, View
 from ballsdex.core.metrics import caught_balls
+from ballsdex.core.models import (
+    Ball,
+    BallInstance,
+    Player,
+    Special,
+    Trade,
+    TradeObject,
+    balls,
+    specials,
+)
 from ballsdex.core.utils.utils import can_mention
-from bd_models.models import Ball, BallInstance, Player, Special, Trade, TradeObject, balls, specials
-from settings.models import PromptMessage, settings
+from ballsdex.settings import settings
 
 if TYPE_CHECKING:
     from ballsdex.core.bot import BallsDexBot
@@ -25,28 +34,34 @@ log = logging.getLogger("ballsdex.packages.countryballs")
 
 class CountryballNamePrompt(Modal, title=f"Catch this {settings.collectible_name}!"):
     name = TextInput(
-        label=f"Name of this {settings.collectible_name}", style=discord.TextStyle.short, placeholder="Your guess"
+        label=f"Name of this {settings.collectible_name}",
+        style=discord.TextStyle.short,
+        placeholder="Your guess",
     )
 
     def __init__(self, view: BallSpawnView):
         super().__init__()
         self.view = view
 
-    async def on_error(self, interaction: discord.Interaction["BallsDexBot"], error: Exception) -> None:
-        if isinstance(error, discord.NotFound) and error.code == 10062:
-            return
+    async def on_error(
+        self, interaction: discord.Interaction["BallsDexBot"], error: Exception, /  # noqa: W504
+    ) -> None:
         log.exception("An error occured in countryball catching prompt", exc_info=error)
         if interaction.response.is_done():
-            await interaction.followup.send(f"An error occured with this {settings.collectible_name}.")
+            await interaction.followup.send(
+                f"An error occured with this {settings.collectible_name}.",
+            )
         else:
-            await interaction.response.send_message(f"An error occured with this {settings.collectible_name}.")
+            await interaction.response.send_message(
+                f"An error occured with this {settings.collectible_name}.",
+            )
 
     async def on_submit(self, interaction: discord.Interaction["BallsDexBot"]):
         await interaction.response.defer(thinking=True)
 
-        player, _ = await Player.objects.aget_or_create(discord_id=interaction.user.id)
+        player, _ = await Player.get_or_create(discord_id=interaction.user.id)
         if self.view.caught:
-            slow_message = settings.get_random_message(PromptMessage.PromptType.SLOW).format(
+            slow_message = random.choice(settings.slow_messages).format(
                 user=interaction.user.mention,
                 collectible=settings.collectible_name,
                 ball=self.view.name,
@@ -54,7 +69,11 @@ class CountryballNamePrompt(Modal, title=f"Catch this {settings.collectible_name
                 emoji=interaction.client.get_emoji(self.view.model.emoji_id),
             )
 
-            await interaction.followup.send(slow_message, ephemeral=True, allowed_mentions=await can_mention([player]))
+            await interaction.followup.send(
+                slow_message,
+                ephemeral=True,
+                allowed_mentions=await can_mention([player]),
+            )
             return
 
         if not self.view.is_name_valid(self.name.value):
@@ -63,7 +82,7 @@ class CountryballNamePrompt(Modal, title=f"Catch this {settings.collectible_name
             else:
                 wrong_name = self.name.value
 
-            wrong_message = settings.get_random_message(PromptMessage.PromptType.WRONG).format(
+            wrong_message = random.choice(settings.wrong_messages).format(
                 user=interaction.user.mention,
                 collectible=settings.collectible_name,
                 ball=self.view.name,
@@ -72,11 +91,15 @@ class CountryballNamePrompt(Modal, title=f"Catch this {settings.collectible_name
                 emoji=interaction.client.get_emoji(self.view.model.emoji_id),
             )
             await interaction.followup.send(
-                wrong_message, allowed_mentions=await can_mention([player]), ephemeral=False
+                wrong_message,
+                allowed_mentions=await can_mention([player]),
+                ephemeral=False,
             )
             return
 
-        ball, has_caught_before = await self.view.catch_ball(interaction.user, player=player, guild=interaction.guild)
+        ball, has_caught_before = await self.view.catch_ball(
+            interaction.user, player=player, guild=interaction.guild
+        )
 
         await interaction.followup.send(
             self.view.get_catch_message(ball, has_caught_before, interaction.user.mention),
@@ -146,14 +169,7 @@ class BallSpawnView(View):
     @button(style=discord.ButtonStyle.primary, label="Catch me!")
     async def catch_button(self, interaction: discord.Interaction["BallsDexBot"], button: Button):
         if self.caught:
-            slow_message = settings.get_random_message(PromptMessage.PromptType.SLOW).format(
-                user=interaction.user.mention,
-                collectible=settings.collectible_name,
-                ball=self.name,
-                collectibles=settings.plural_collectible_name,
-                emoji=interaction.client.get_emoji(self.model.emoji_id),
-            )
-            await interaction.response.send_message(slow_message, ephemeral=True)
+            await interaction.response.send_message("I was caught already!", ephemeral=True)
         else:
             await interaction.response.send_modal(CountryballNamePrompt(self))
 
@@ -198,9 +214,9 @@ class BallSpawnView(View):
             x
             for x in specials.values()
             # handle null start/end dates with infinity times
-            if (x.start_date or datetime.min.replace(tzinfo=timezone.get_current_timezone()))
-            <= timezone.now()
-            <= (x.end_date or datetime.max.replace(tzinfo=timezone.get_current_timezone()))
+            if (x.start_date or datetime.min.replace(tzinfo=get_default_timezone()))
+            <= tortoise_now()
+            <= (x.end_date or datetime.max.replace(tzinfo=get_default_timezone()))
         ]
 
         if not population:
@@ -213,7 +229,9 @@ class BallSpawnView(View):
 
         weights = [x.rarity for x in population] + [common_weight]
         # None is added representing the common countryball
-        special: Special | None = random.choices(population=population + [None], weights=weights, k=1)[0]
+        special: Special | None = random.choices(
+            population=population + [None], weights=weights, k=1
+        )[0]
 
         return special
 
@@ -238,12 +256,13 @@ class BallSpawnView(View):
             source = string.ascii_uppercase + string.ascii_lowercase + string.ascii_letters
             return "".join(random.choices(source, k=15))
 
-        extension = self.model.wild_card.name.split(".")[-1]
+        extension = self.model.wild_card.split(".")[-1]
+        file_location = "./admin_panel/media/" + self.model.wild_card
         file_name = f"nt_{generate_random_name()}.{extension}"
         try:
             permissions = channel.permissions_for(channel.guild.me)
             if permissions.attach_files and permissions.send_messages:
-                spawn_message = settings.get_random_message(PromptMessage.PromptType.SPAWN).format(
+                spawn_message = random.choice(settings.spawn_messages).format(
                     collectible=settings.collectible_name,
                     ball=self.name,
                     collectibles=settings.plural_collectible_name,
@@ -251,7 +270,9 @@ class BallSpawnView(View):
                 )
 
                 self.message = await channel.send(
-                    spawn_message, view=self, file=discord.File(self.model.wild_card.path, filename=file_name)
+                    spawn_message,
+                    view=self,
+                    file=discord.File(file_location, filename=file_name),
                 )
                 return True
             else:
@@ -290,7 +311,11 @@ class BallSpawnView(View):
         return cname in possible_names
 
     async def catch_ball(
-        self, user: discord.User | discord.Member, *, player: Player | None, guild: discord.Guild | None
+        self,
+        user: discord.User | discord.Member,
+        *,
+        player: Player | None,
+        guild: discord.Guild | None,
     ) -> tuple[BallInstance, bool]:
         """
         Mark this countryball as caught and assign a new `BallInstance` (or transfer ownership if
@@ -324,21 +349,21 @@ class BallSpawnView(View):
             raise RuntimeError("This ball was already caught!")
         self.caught = True
         self.catch_button.disabled = True
-        caught_time = timezone.now()
-        player = player or (await Player.objects.aget_or_create(discord_id=user.id))[0]
-        is_new = not await BallInstance.objects.filter(player=player, ball=self.model).aexists()
+        caught_time = tortoise_now()
+        player = player or (await Player.get_or_create(discord_id=user.id))[0]
+        is_new = not await BallInstance.filter(player=player, ball=self.model).exists()
 
         if self.ballinstance:
             # if specified, do not create a countryball but switch owner
             # it's important to register this as a trade to avoid bypass
-            trade = await Trade.objects.acreate(player1=self.ballinstance.player, player2=player)
-            await TradeObject.objects.acreate(
+            trade = await Trade.create(player1=self.ballinstance.player, player2=player)
+            await TradeObject.create(
                 trade=trade, player=self.ballinstance.player, ballinstance=self.ballinstance
             )
             self.ballinstance.trade_player = self.ballinstance.player
             self.ballinstance.player = player
             self.ballinstance.locked = None  # type: ignore
-            await self.ballinstance.asave(update_fields=("player", "trade_player", "locked"))
+            await self.ballinstance.save(update_fields=("player_id", "trade_player_id", "locked"))
             return self.ballinstance, is_new
 
         # stat may vary by +/- 20% of base stat
@@ -359,7 +384,7 @@ class BallSpawnView(View):
         if not special:
             special = self.get_random_special()
 
-        ball = await BallInstance.objects.acreate(
+        ball = await BallInstance.create(
             ball=self.model,
             player=player,
             special=special,
@@ -402,12 +427,15 @@ class BallSpawnView(View):
         if ball.specialcard and ball.specialcard.catch_phrase:
             text += f"*{ball.specialcard.catch_phrase}*\n"
         if new_ball:
-            text += f"This is a **new {settings.collectible_name}** that has been added to your completion!"
+            text += (
+                f"This is a **new {settings.collectible_name}** "
+                "that has been added to your completion!"
+            )
         if self.ballinstance:
             text += f"This {settings.collectible_name} was dropped by <@{self.og_id}>\n"
 
         caught_message = (
-            settings.get_random_message(PromptMessage.PromptType.CATCH).format(
+            random.choice(settings.caught_messages).format(
                 user=mention,
                 collectible=settings.collectible_name,
                 ball=self.name,
@@ -417,4 +445,7 @@ class BallSpawnView(View):
             + " "
         )
 
-        return caught_message + f"`(#{ball.pk:0X}, {ball.attack_bonus:+}%/{ball.health_bonus:+}%)`\n\n{text}"
+        return (
+            caught_message
+            + f"`(#{ball.pk:0X}, {ball.attack_bonus:+}%/{ball.health_bonus:+}%)`\n\n{text}"
+        )

@@ -369,8 +369,7 @@
             "description": "Extra Python paths to register for Tortoise models",
             "items": {
                 "$ref": "#/$defs/python-path"
-            },
-            "deprecated": true
+            }
         },
         "extra-django-apps": {
             "type": [

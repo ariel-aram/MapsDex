@@ -10,11 +10,9 @@ from typing import TYPE_CHECKING, Literal
 import discord
 from discord.utils import format_dt
 
-from settings.models import settings
+from ballsdex.settings import settings
 
 if TYPE_CHECKING:
-    from discord.ext.commands import Context
-
     from ballsdex.core.bot import BallsDexBot
 
 log = logging.getLogger("ballsdex.packages.countryballs")
@@ -59,15 +57,17 @@ class BaseSpawnManager:
         raise NotImplementedError
 
     @abstractmethod
-    async def admin_explain(self, ctx: "Context[BallsDexBot]", guild: discord.Guild):
+    async def admin_explain(
+        self, interaction: discord.Interaction["BallsDexBot"], guild: discord.Guild
+    ):
         """
         Invoked by "/admin cooldown", this function should provide insights of the cooldown
         system for admins.
 
         Parameters
         ----------
-        ctx: ~discord.ext.commands.Context[BallsDexBot]
-            The context of the invoking hybrid command
+        interaction: discord.Interaction[BallsDexBot]
+            The interaction of the slash command
         guild: discord.Guild
             The guild that is targeted for the insights
         """
@@ -99,14 +99,16 @@ class SpawnCooldown:
 
     time: datetime
     # initialize partially started, to reduce the dead time after starting the bot
-    scaled_message_count: float = field(default_factory=lambda: settings.spawn_chance_min // 2)
-    threshold: int = field(default_factory=lambda: random.randint(settings.spawn_chance_min, settings.spawn_chance_max))
+    scaled_message_count: float = field(
+        default_factory=lambda: settings.spawn_chance_range[0] // 2
+    )
+    threshold: int = field(default_factory=lambda: random.randint(*settings.spawn_chance_range))
     lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False)
     message_cache: deque[CachedMessage] = field(default_factory=lambda: deque(maxlen=100))
 
     def reset(self, time: datetime):
         self.scaled_message_count = 1.0
-        self.threshold = random.randint(settings.spawn_chance_min, settings.spawn_chance_max)
+        self.threshold = random.randint(*settings.spawn_chance_range)
         try:
             self.lock.release()
         except RuntimeError:  # lock is not acquired
@@ -117,7 +119,9 @@ class SpawnCooldown:
         # this is a deque, not a list
         # its property is that, once the max length is reached (100 for us),
         # the oldest element is removed, thus we only have the last 100 messages in memory
-        self.message_cache.append(CachedMessage(content=message.content, author_id=message.author.id))
+        self.message_cache.append(
+            CachedMessage(content=message.content, author_id=message.author.id)
+        )
 
         if self.lock.locked():
             return False
@@ -184,25 +188,28 @@ class SpawnManager(BaseSpawnManager):
         cooldown.reset(message.created_at)
         return True
 
-    async def admin_explain(self, ctx: "Context[BallsDexBot]", guild: discord.Guild):
+    async def admin_explain(
+        self, interaction: discord.Interaction["BallsDexBot"], guild: discord.Guild
+    ):
         cooldown = self.cooldowns.get(guild.id)
         if not cooldown:
-            await ctx.send(
-                "No spawn manager could be found for that guild. Spawn may have been disabled.", ephemeral=True
+            await interaction.response.send_message(
+                "No spawn manager could be found for that guild. Spawn may have been disabled.",
+                ephemeral=True,
             )
             return
 
         if not guild.member_count:
-            await ctx.send("`member_count` data not returned for this guild, spawn cannot work.")
+            await interaction.response.send_message(
+                "`member_count` data not returned for this guild, spawn cannot work."
+            )
             return
 
         embed = discord.Embed()
         embed.set_author(name=guild.name, icon_url=guild.icon.url if guild.icon else None)
         embed.colour = discord.Colour.orange()
 
-        delta = (
-            (ctx.interaction.created_at if ctx.interaction else ctx.message.created_at) - cooldown.time
-        ).total_seconds()
+        delta = (interaction.created_at - cooldown.time).total_seconds()
         # change how the threshold varies according to the member count, while nuking farm servers
         if guild.member_count < 5:
             multiplier = 0.1
@@ -281,4 +288,4 @@ class SpawnManager(BaseSpawnManager):
                 value="- " + "\n- ".join(informations),
             )
 
-        await ctx.send(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True)

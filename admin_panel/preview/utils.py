@@ -1,4 +1,18 @@
-from bd_models.models import Ball, Economy, Regime, Special, balls, economies, regimes, specials
+import os
+
+from tortoise import Tortoise
+
+from ballsdex.__main__ import init_tortoise
+from ballsdex.core.models import (
+    Ball,
+    Economy,
+    Regime,
+    Special,
+    balls,
+    economies,
+    regimes,
+    specials,
+)
 
 
 async def refresh_cache():
@@ -9,18 +23,20 @@ async def refresh_cache():
     This must be called on every request, since the image generation relies on cache and we
     do *not* want caching in the admin panel to happen (since we're actively editing stuff).
     """
+    if not Tortoise._inited:
+        await init_tortoise(os.environ["BALLSDEXBOT_DB_URL"], skip_migrations=True)
     balls.clear()
-    async for ball in Ball.objects.all():
+    for ball in await Ball.all():
         balls[ball.pk] = ball
 
     regimes.clear()
-    async for regime in Regime.objects.all():
+    for regime in await Regime.all():
         regimes[regime.pk] = regime
 
     economies.clear()
-    async for economy in Economy.objects.all():
+    for economy in await Economy.all():
         economies[economy.pk] = economy
 
     specials.clear()
-    async for special in Special.objects.all():
+    for special in await Special.all():
         specials[special.pk] = special

@@ -4,7 +4,6 @@ from ballsdex.packages.countryballs.spawn import BaseSpawnManager
 
 if TYPE_CHECKING:
     import discord
-    from discord.ext.commands import Context
 
     from ballsdex.core.bot import BallsDexBot
 
@@ -71,16 +70,18 @@ class ABSpawner(BaseSpawnManager):
             msg = manager.__class__.__name__
         return result, msg
 
-    async def admin_explain(self, ctx: "Context[BallsDexBot]", guild: "discord.Guild"):
+    async def admin_explain(
+        self, interaction: "discord.Interaction[BallsDexBot]", guild: "discord.Guild"
+    ):
         manager = self.get_manager(guild)
-        await manager.admin_explain(ctx, guild)
+        await manager.admin_explain(interaction, guild)
         if manager == self.manager_a:
             a_or_b = "A"
             percentage = self.percentage
         else:
             a_or_b = "B"
             percentage = 100 - self.percentage
-        await ctx.send(
+        await interaction.followup.send(
             f"[AB Spawner] Server {guild.name} ({guild.id}) has been assigned to spawn manager "
             f"{a_or_b} (`{manager.__class__.__name__}`) ({percentage}% chance)",
             ephemeral=True,

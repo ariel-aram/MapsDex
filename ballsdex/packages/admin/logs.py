@@ -1,52 +1,64 @@
 import discord
-from discord.ext import commands
+from discord import app_commands
 
 from ballsdex.core.bot import BallsDexBot
-from ballsdex.core.utils import checks
+from ballsdex.settings import settings
+from .logging_decorator import log_admin_command
 
 
-@commands.hybrid_group()
-@checks.has_permissions("admincmd.logs")
-async def logs(ctx: commands.Context[BallsDexBot]):
+class Logs(app_commands.Group):
     """
     Bot logs management
     """
-    await ctx.send_help(ctx.command)
 
+    @app_commands.command(name="catchlogs")
+    @app_commands.checks.has_any_role(*settings.root_role_ids)
+    @log_admin_command()
+    async def logs_add(
+        self,
+        interaction: discord.Interaction[BallsDexBot],
+        user: discord.User,
+    ):
+        """
+        Add or remove a user from catch logs.
 
-@logs.command(name="catchlogs")
-@checks.has_permissions("admincmd.logs")
-async def logs_add(ctx: commands.Context[BallsDexBot], user: discord.User):
-    """
-    Add or remove a user from catch logs.
+        Parameters
+        ----------
+        user: discord.User
+            The user you want to add or remove to the logs.
+        """
+        if user.id in interaction.client.catch_log:
+            interaction.client.catch_log.remove(user.id)
+            await interaction.response.send_message(
+                f"{user} removed from catch logs.", ephemeral=True
+            )
+        else:
+            interaction.client.catch_log.add(user.id)
+            await interaction.response.send_message(f"{user} added to catch logs.", ephemeral=True)
 
-    Parameters
-    ----------
-    user: discord.User
-        The user you want to add or remove to the logs.
-    """
-    if user.id in ctx.bot.catch_log:
-        ctx.bot.catch_log.remove(user.id)
-        await ctx.send(f"{user} removed from catch logs.", ephemeral=True)
-    else:
-        ctx.bot.catch_log.add(user.id)
-        await ctx.send(f"{user} added to catch logs.", ephemeral=True)
+    @app_commands.command(name="commandlogs")
+    @app_commands.checks.has_any_role(*settings.root_role_ids)
+    @log_admin_command()
+    async def commandlogs_add(
+        self,
+        interaction: discord.Interaction[BallsDexBot],
+        user: discord.User,
+    ):
+        """
+        Add or remove a user from command logs.
 
-
-@logs.command(name="commandlogs")
-@checks.has_permissions("admincmd.logs")
-async def commandlogs_add(ctx: commands.Context[BallsDexBot], user: discord.User):
-    """
-    Add or remove a user from command logs.
-
-    Parameters
-    ----------
-    user: discord.User
-        The user you want to add or remove to the logs.
-    """
-    if user.id in ctx.bot.command_log:
-        ctx.bot.command_log.remove(user.id)
-        await ctx.send(f"{user} removed from command logs.", ephemeral=True)
-    else:
-        ctx.bot.command_log.add(user.id)
-        await ctx.send(f"{user} added to command logs.", ephemeral=True)
+        Parameters
+        ----------
+        user: discord.User
+            The user you want to add or remove to the logs.
+        """
+        if user.id in interaction.client.command_log:
+            interaction.client.command_log.remove(user.id)
+            await interaction.response.send_message(
+                f"{user} removed from command logs.", ephemeral=True
+            )
+        else:
+            interaction.client.command_log.add(user.id)
+            await interaction.response.send_message(
+                f"{user} added to command logs.", ephemeral=True
+            )

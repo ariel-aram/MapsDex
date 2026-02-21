@@ -15,7 +15,12 @@ if TYPE_CHECKING:
 class SpecialAdmin(admin.ModelAdmin):
     save_on_top = True
     fieldsets = [
-        (None, {"fields": ["name", "catch_phrase", "rarity", "emoji", "background", "credits"]}),
+        (
+            None,
+            {
+                "fields": ["name", "catch_phrase", "rarity", "emoji", "background", "credits"],
+            },
+        ),
         (
             "Time range",
             {
@@ -25,7 +30,13 @@ class SpecialAdmin(admin.ModelAdmin):
                 "at the specified time.",
             },
         ),
-        ("Advanced", {"fields": ["tradeable", "hidden"], "classes": ["collapse"]}),
+        (
+            "Advanced",
+            {
+                "fields": ["tradeable", "hidden"],
+                "classes": ["collapse"],
+            },
+        ),
     ]
 
     list_display = ["name", "pk", "emoji_display", "start_date", "end_date", "rarity", "hidden"]
@@ -38,7 +49,8 @@ class SpecialAdmin(admin.ModelAdmin):
     def emoji_display(self, obj: Special):
         return (
             mark_safe(
-                f'<img src="https://cdn.discordapp.com/emojis/{obj.emoji}.png?size=40" title="ID: {obj.emoji}" />'
+                f'<img src="https://cdn.discordapp.com/emojis/{obj.emoji}.png?size=40" '
+                f'title="ID: {obj.emoji}" />'
             )
             if obj.emoji and obj.emoji.isdigit()
             else obj.emoji
