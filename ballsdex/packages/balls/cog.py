@@ -935,25 +935,93 @@ class Balls(commands.GroupCog, group_name=settings.balls_slash_name):
         """
         await interaction.response.defer(thinking=True)
 
-        players = await Player.annotate(ball_count=Count("balls")).order_by("-ball_count").limit(10)
+        query = (
+            Player.objects
+            .annotate(ball_count=Count("balls"))
+            .order_by("-ball_count")[:10]
+        )
+        
+        # Prepare player data
+        players = []
+        rank = 1
+        async for player in query:
+            user = self.bot.get_user(player.discord_id)
+            if user is None:
+                try:
+                    user = await self.bot.fetch_user(player.discord_id)
+                except:
+                    user = f"Unknown User ({player.discord_id})"
+            players.append((rank, user, player.ball_count))
+            rank += 1
 
         if not players:
             await interaction.followup.send("No players found.", ephemeral=True)
             return
 
-        entries = []
-        for i, player in enumerate(players):
-            user = self.bot.get_user(player.discord_id)
-            if user is None:
-                user = await self.bot.fetch_user(player.discord_id)
-            entries.append((f"{i + 1}. {user.name}", f"Maps: {player.ball_count}"))
-
-        source = FieldPageSource(entries, per_page=5, inline=False)
-        source.embed.title = "Top 10 players"
-        source.embed.color = discord.Color.blurple()
-
-        pages = Pages(source=source, interaction=interaction)
-        await pages.start()
+        # Create embed
+        embed = discord.Embed(
+            title="Top 10 Players",
+            color=discord.Color.blurple()
+        )
+        
+        # Add first 5 players
+        for rank, user, ball_count in players[:5]:
+            embed.add_field(
+                name=f"**{rank}. {user.name if hasattr(user, 'name') else str(user)}**",
+                value=f"Maps: {ball_count}",
+                inline=False
+            )
+        
+        embed.set_footer(text="Page 1/2")
+        
+        # If only 5 or less players, send directly
+        if len(players) <= 5:
+            await interaction.followup.send(embed=embed)
+            return
+        
+        # Create second page embed
+        embed2 = discord.Embed(
+            title="Top 10 Players",
+            color=discord.Color.blurple()
+        )
+        
+        # Add remaining players
+        for rank, user, ball_count in players[5:]:
+            embed2.add_field(
+                name=f"**{rank}. {user.name if hasattr(user, 'name') else str(user)}**",
+                value=f"Maps: {ball_count}",
+                inline=False
+            )
+        
+        embed2.set_footer(text="Page 2/2")
+        
+        # Simple view with just Next/Back buttons
+        class SimpleView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=180)
+                self.page = 1
+            
+            @discord.ui.button(label="Back", style=discord.ButtonStyle.blurple, disabled=True)
+            async def back(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if self.page > 1:
+                    self.page -= 1
+                    button.disabled = (self.page == 1)
+                    self.children[1].disabled = (self.page == 2)
+                    await interaction.response.edit_message(embed=embed, view=self)
+                else:
+                    await interaction.response.defer()
+            
+            @discord.ui.button(label="Next", style=discord.ButtonStyle.blurple)
+            async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
+                if self.page < 2:
+                    self.page += 1
+                    button.disabled = (self.page == 2)
+                    self.children[0].disabled = (self.page == 1)
+                    await interaction.response.edit_message(embed=embed2, view=self)
+                else:
+                    await interaction.response.defer()
+        
+        await interaction.followup.send(embed=embed, view=SimpleView())
 
     @app_commands.command()
     @app_commands.checks.cooldown(1, 20, key=lambda i: i.user.id)
