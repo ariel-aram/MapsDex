@@ -8,9 +8,9 @@ import time
 from datetime import datetime
 from ballsdex.settings import settings
 
-REPORT_CHANNEL_ID = 1407012534715809843
-REPORT_GUILD_ID = 1406779375608664276
-REPORT_JSON_PATH = os.path.join(os.path.dirname(__file__), "reports.json")
+REPORT_CHANNEL_ID = 0
+REPORT_GUILD_ID = 0
+REPORT_JSON_PATH = "/var/log/ballsdex/reports.json"
 
 REPORT_TYPES = [
     ("Report Violation", "violation"),
@@ -38,7 +38,7 @@ def generate_report_id(existing_ids):
         if rid not in existing_ids:
             return rid
 
-class ReportCog(commands.Cog, name="Report"):
+class Report(commands.Cog, name="Report"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.report_messages = {}
@@ -99,7 +99,7 @@ class ReportCog(commands.Cog, name="Report"):
         await interaction.response.send_message("❌ Report submission failed. Please contact an administrator.", ephemeral=True)
 
 class ReportReplyView(discord.ui.View):
-    def __init__(self, cog: ReportCog, report_id: str, report_data: dict):
+    def __init__(self, cog: Report, report_id: str, report_data: dict):
         super().__init__(timeout=None)
         self.cog = cog
         self.report_id = report_id
@@ -115,7 +115,7 @@ class ReportReplyView(discord.ui.View):
         await interaction.response.send_modal(modal)
 
 class ReportReplyModal(discord.ui.Modal, title="Reply to Report"):
-    def __init__(self, cog: ReportCog, report_id: str, report_data: dict):
+    def __init__(self, cog: Report, report_id: str, report_data: dict):
         super().__init__()
         self.cog = cog
         self.report_id = report_id
@@ -187,4 +187,4 @@ class ReportReplyModal(discord.ui.Modal, title="Reply to Report"):
         await interaction.followup.send("❌ Reply failed. Please contact an administrator.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(ReportCog(bot))
+    await bot.add_cog(Report(bot))
