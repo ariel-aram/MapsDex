@@ -753,7 +753,7 @@ async def rarity(ctx: commands.Context["BallsDexBot"], *, flags: RarityFlags):
     view.add_item(text_display)
     menu = Menu(ctx.bot, view, TextSource(text, prefix="```md\n", suffix="```"), TextFormatter(text_display))
     await menu.init()
-    await ctx.send(view=view)
+    await ctx.send(view=view, ephemeral=True)
 
 
 @balls.command(name="farms")
