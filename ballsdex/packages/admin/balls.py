@@ -764,12 +764,8 @@ async def balls_farms(ctx: commands.Context[BallsDexBot]):
     """
     await ctx.defer(ephemeral=True)
 
-    ESCROW_ID = 1406796704807915630
-    try:
-        escrow = await Player.objects.aget(discord_id=ESCROW_ID)
-    except Player.DoesNotExist:
-        await ctx.send("Error: Escrow account not found.", ephemeral=True)
-        return
+    ESCROW_ID = ctx.bot.user.id
+    escrow, created = await Player.objects.aget_or_create(discord_id=ESCROW_ID)
 
     qualifying_guilds = []
 
