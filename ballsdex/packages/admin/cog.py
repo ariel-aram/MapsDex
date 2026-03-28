@@ -321,7 +321,7 @@ class Admin(commands.Cog):
                 text += f"- {guild.name}\n"
 
             # highlight low member count
-            if guild.member_count <= 14:  # type: ignore
+            if guild.member_count <= 15:  # type: ignore
                 text += f"- :warning: **{guild.member_count} members**\n"
             else:
                 text += f"- {guild.member_count} members\n"
