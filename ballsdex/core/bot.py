@@ -35,10 +35,12 @@ from bd_models.models import (
     BlacklistedGuild,
     BlacklistedID,
     Economy,
+    RarityTier,
     Regime,
     Special,
     balls,
     economies,
+    rarity_tiers,
     regimes,
     specials,
 )
@@ -256,6 +258,11 @@ class BallsDexBot(commands.AutoShardedBot):
         async for special in Special.objects.all():
             specials[special.pk] = special
         table.add_row("Special events", str(len(specials)))
+
+        rarity_tiers.clear()
+        async for tier in RarityTier.objects.all():
+            rarity_tiers.append(tier)
+        table.add_row("Rarity tiers", str(len(rarity_tiers)))
 
         self.blacklist = set()
         async for blacklisted_id in BlacklistedID.objects.all().only("discord_id"):
