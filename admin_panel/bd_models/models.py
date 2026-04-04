@@ -43,6 +43,7 @@ balls: dict[int, Ball] = {}
 regimes: dict[int, Regime] = {}
 economies: dict[int, Economy] = {}
 specials: dict[int, Special] = {}
+rarity_tiers: list["RarityTier"] = []
 
 
 class QuerySet[T: models.Model](models.QuerySet[T]):
@@ -647,6 +648,33 @@ class Block(models.Model):
     class Meta:
         managed = True
         db_table = "block"
+
+
+class RarityTier(models.Model):
+    name = models.CharField(max_length=64, unique=True, help_text="Display name of the tier (e.g. Legendary)")
+    emoji = models.CharField(max_length=8, help_text="Emoji shown next to the tier name (e.g. 🔴)")
+    color = models.CharField(
+        max_length=7, default="#FFFFFF", help_text="Hex color code used for display purposes (e.g. #FFD700)"
+    )
+    min_percentile = models.FloatField(
+        help_text=(
+            "Minimum rarity percentile for a collectible to qualify for this tier. "
+            "Uses a 0.0–1.0 scale where 1.0 is the rarest end and 0.0 is the most common. "
+            "Tiers are evaluated from highest to lowest; the first match wins."
+        )
+    )
+
+    objects: Manager[Self] = Manager()
+
+    def __str__(self) -> str:
+        return f"{self.emoji} {self.name} (≥{self.min_percentile:.0%})"
+
+    class Meta:
+        managed = True
+        db_table = "raritytier"
+        ordering = ["-min_percentile"]
+        verbose_name = "Rarity Tier"
+        verbose_name_plural = "Rarity Tiers"
 
 
 REPORT_TYPE_CHOICES = [

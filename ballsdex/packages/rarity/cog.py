@@ -9,7 +9,7 @@ from discord.ext import commands
 from discord.ui import ActionRow, Button, TextDisplay
 
 from ballsdex.core.discord import LayoutView
-from bd_models.models import Ball
+from bd_models.models import Ball, rarity_tiers
 from bd_models.models import balls as all_balls_cache
 from settings.models import settings
 
@@ -18,35 +18,40 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("ballsdex.packages.rarity")
 
-# Tiers ordered rarest → most common.
-# threshold = minimum rarity percentile to qualify (1.0 = rarest end, 0.0 = most common end).
-TIERS: list[tuple[str, str, discord.Color, float]] = [
-    ("Legendary", "🔴", discord.Color.gold(), 0.90),
-    ("Epic", "🟠", discord.Color.purple(), 0.75),
-    ("Rare", "🟣", discord.Color.blue(), 0.50),
-    ("Uncommon", "🔵", discord.Color.green(), 0.25),
-    ("Common", "🟢", discord.Color.light_grey(), 0.00),
+# Default tiers used as a fallback when none are configured in the admin panel.
+_DEFAULT_TIERS: list[tuple[str, str, float]] = [
+    ("Legendary", "🔴", 0.90),
+    ("Epic", "🟠", 0.75),
+    ("Rare", "🟣", 0.50),
+    ("Uncommon", "🔵", 0.25),
+    ("Common", "🟢", 0.00),
 ]
 
-TIER_NAMES = [t[0] for t in TIERS]
 BALLS_PER_PAGE = 15
 
 
-def get_tier(percentile: float) -> tuple[str, str, discord.Color]:
-    """Return (name, emoji, color) for a rarity percentile (1.0 = rarest, 0.0 = most common)."""
-    for name, emoji, color, threshold in TIERS:
+def _get_active_tiers() -> list[tuple[str, str, float]]:
+    """Return configured tiers from the cache, falling back to defaults if none are set."""
+    if rarity_tiers:
+        return [(t.name, t.emoji, t.min_percentile) for t in rarity_tiers]
+    return _DEFAULT_TIERS
+
+
+def get_tier(percentile: float) -> tuple[str, str]:
+    """Return (name, emoji) for a rarity percentile (1.0 = rarest, 0.0 = most common)."""
+    for name, emoji, threshold in _get_active_tiers():
         if percentile >= threshold:
             return (name, emoji, color)  # type: ignore[return-value]
     last_tier = TIERS[-1]
     return (last_tier[0], last_tier[1], last_tier[2])  # type: ignore[return-value]
 
 
-def compute_ball_tiers(enabled_balls: list[Ball]) -> list[tuple[Ball, str, str, discord.Color, float]]:
+def compute_ball_tiers(enabled_balls: list[Ball]) -> list[tuple[Ball, str, str, float]]:
     """
     Compute rarity tiers for a list of enabled balls.
 
     Higher rarity weight = more common. Returns a list sorted rarest-first (ascending weight),
-    each entry being (ball, tier_name, tier_emoji, tier_color, spawn_probability_pct).
+    each entry being (ball, tier_name, tier_emoji, spawn_probability_pct).
     """
     if not enabled_balls:
         return []
@@ -58,9 +63,9 @@ def compute_ball_tiers(enabled_balls: list[Ball]) -> list[tuple[Ball, str, str, 
     result: list[tuple[Ball, str, str, discord.Color, float]] = []
     for rank, ball in enumerate(sorted_balls):
         percentile = 1.0 - (rank / n)  # rank 0 → percentile 1.0 (rarest)
-        tier_name, tier_emoji, tier_color = get_tier(percentile)
+        tier_name, tier_emoji = get_tier(percentile)
         prob = (ball.rarity / total_weight * 100) if total_weight > 0 else 0.0
-        result.append((ball, tier_name, tier_emoji, tier_color, prob))
+        result.append((ball, tier_name, tier_emoji, prob))
 
     return result
 
@@ -118,7 +123,7 @@ class RarityListView(LayoutView):
                 pass
 
 
-def _build_list_pages(entries: list[tuple[Ball, str, str, discord.Color, float]], filter_tier: str | None) -> list[str]:
+def _build_list_pages(entries: list[tuple[Ball, str, str, float]], filter_tier: str | None) -> list[str]:
     if filter_tier:
         entries = [e for e in entries if e[1].lower() == filter_tier.lower()]
     if not entries:
@@ -127,7 +132,7 @@ def _build_list_pages(entries: list[tuple[Ball, str, str, discord.Color, float]]
     chunks = [entries[i : i + BALLS_PER_PAGE] for i in range(0, len(entries), BALLS_PER_PAGE)]
     pages: list[str] = []
 
-    for page_num, chunk in enumerate(chunks, start=1):
+    for chunk in chunks:
         header = (
             f"## {settings.plural_collectible_name.capitalize()} by Rarity"
             + (f" — {filter_tier}" if filter_tier else "")
@@ -137,7 +142,7 @@ def _build_list_pages(entries: list[tuple[Ball, str, str, discord.Color, float]]
         )
         lines = [
             f"{tier_emoji} **{ball.country}** — {tier_name} `({prob:.3f}%)`"
-            for ball, tier_name, tier_emoji, _, prob in chunk
+            for ball, tier_name, tier_emoji, prob in chunk
         ]
         pages.append(header + "\n".join(lines))
 
@@ -167,26 +172,22 @@ class Rarity(commands.GroupCog, name="rarity"):
 
         entries = compute_ball_tiers(enabled)
         total = len(entries)
+        active_tiers = _get_active_tiers()
 
-        tier_data: dict[str, list[float]] = {name: [] for name, *_ in TIERS}
-        for _, tier_name, _, _, prob in entries:
-            tier_data[tier_name].append(prob)
+        tier_data: dict[str, list[float]] = {}
+        for _, tier_name, _, prob in entries:
+            tier_data.setdefault(tier_name, []).append(prob)
 
         lines = [
             f"## {settings.plural_collectible_name.capitalize()} — Rarity Tiers",
-            f"-# {total} enabled {settings.plural_collectible_name} across {len(TIERS)} tiers.\n",
+            f"-# {total} enabled {settings.plural_collectible_name} across {len(active_tiers)} tiers.\n",
         ]
 
-        percentile_labels = {
-            "Legendary": "Bottom 10%",
-            "Epic": "10–25%",
-            "Rare": "25–50%",
-            "Uncommon": "50–75%",
-            "Common": "Top 25%",
-        }
+        for i, (tier_name, tier_emoji, min_pct) in enumerate(active_tiers):
+            next_pct = active_tiers[i - 1][2] if i > 0 else 1.0
+            rank_label = f"Top {(1.0 - min_pct) * 100:.0f}%" if i == 0 else f"{min_pct * 100:.0f}–{next_pct * 100:.0f}%"
 
-        for tier_name, tier_emoji, _, _ in TIERS:
-            probs = tier_data[tier_name]
+            probs = tier_data.get(tier_name, [])
             count = len(probs)
             if count == 0:
                 prob_range = "—"
@@ -199,7 +200,7 @@ class Rarity(commands.GroupCog, name="rarity"):
                 f"### {tier_emoji} {tier_name}\n"
                 f"**{count}** {settings.plural_collectible_name} · "
                 f"Spawn chance: {prob_range} · "
-                f"Rank: {percentile_labels.get(tier_name, '')}"
+                f"Rank: {rank_label}"
             )
 
         lines.append(f"\n-# Use `/rarity list` to browse all {settings.plural_collectible_name} by tier.")
@@ -210,8 +211,7 @@ class Rarity(commands.GroupCog, name="rarity"):
 
     @app_commands.command()
     @app_commands.describe(tier="Filter by rarity tier (leave empty to show all)")
-    @app_commands.choices(tier=[app_commands.Choice(name=name, value=name) for name in TIER_NAMES])
-    async def list(self, interaction: discord.Interaction["BallsDexBot"], tier: app_commands.Choice[str] | None = None):
+    async def list(self, interaction: discord.Interaction["BallsDexBot"], tier: str | None = None):
         """List all collectibles sorted from rarest to most common."""
         await interaction.response.defer(thinking=True)
 
@@ -223,11 +223,10 @@ class Rarity(commands.GroupCog, name="rarity"):
             return
 
         entries = compute_ball_tiers(enabled)
-        filter_tier = tier.value if tier else None
-        pages = _build_list_pages(entries, filter_tier)
+        pages = _build_list_pages(entries, tier)
 
         if not pages:
-            label = f"**{filter_tier}**" if filter_tier else ""
+            label = f"**{tier}**" if tier else ""
             await interaction.followup.send(
                 f"No {settings.plural_collectible_name} found" + (f" in the {label} tier." if label else "."),
                 ephemeral=True,
@@ -237,6 +236,13 @@ class Rarity(commands.GroupCog, name="rarity"):
         view = RarityListView(pages, interaction.user.id)
         await interaction.followup.send(view=view)
         view.message = await interaction.original_response()
+
+    @list.autocomplete("tier")
+    async def list_tier_autocomplete(
+        self, interaction: discord.Interaction["BallsDexBot"], current: str
+    ) -> list[app_commands.Choice[str]]:
+        tier_names = [name for name, *_ in _get_active_tiers()]
+        return [app_commands.Choice(name=name, value=name) for name in tier_names if current.lower() in name.lower()]
 
     @app_commands.command()
     @app_commands.describe(name="Name of the collectible to look up")
@@ -275,7 +281,7 @@ class Rarity(commands.GroupCog, name="rarity"):
             await interaction.followup.send("Could not compute rarity data.", ephemeral=True)
             return
 
-        ball, tier_name, tier_emoji, _, prob = ball_entry
+        ball, tier_name, tier_emoji, prob = ball_entry
         rank = next(i + 1 for i, e in enumerate(entries) if e[0].pk == ball.pk)
         total = len(entries)
 
