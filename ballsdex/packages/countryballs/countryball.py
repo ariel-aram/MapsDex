@@ -165,7 +165,7 @@ class BallSpawnView(LayoutView):
         if entry is None:
             await interaction.response.send_message("Could not determine rarity data.", ephemeral=True)
             return
-        _, tier_name, tier_emoji, tier_color, prob = entry
+        _, tier_name, tier_emoji, prob = entry
         rank = next(i + 1 for i, e in enumerate(entries) if e[0].pk == self.model.pk)
         total = len(entries)
         view = RarityInfoView(
