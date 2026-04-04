@@ -36,8 +36,9 @@ def get_tier(percentile: float) -> tuple[str, str, discord.Color]:
     """Return (name, emoji, color) for a rarity percentile (1.0 = rarest, 0.0 = most common)."""
     for name, emoji, color, threshold in TIERS:
         if percentile >= threshold:
-            return name, emoji, color
-    return TIERS[-1][0], TIERS[-1][1], TIERS[-1][2]
+            return (name, emoji, color)  # type: ignore[return-value]
+    last_tier = TIERS[-1]
+    return (last_tier[0], last_tier[1], last_tier[2])  # type: ignore[return-value]
 
 
 def compute_ball_tiers(enabled_balls: list[Ball]) -> list[tuple[Ball, str, str, discord.Color, float]]:
