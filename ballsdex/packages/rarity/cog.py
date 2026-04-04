@@ -54,7 +54,7 @@ def compute_ball_tiers(enabled_balls: list[Ball]) -> list[tuple[Ball, str, str, 
     sorted_balls = sorted(enabled_balls, key=lambda b: b.rarity)  # ascending = rarest first
     n = len(sorted_balls)
 
-    result = []
+    result: list[tuple[Ball, str, str, discord.Color, float]] = []
     for rank, ball in enumerate(sorted_balls):
         percentile = 1.0 - (rank / n)  # rank 0 → percentile 1.0 (rarest)
         tier_name, tier_emoji, tier_color = get_tier(percentile)
