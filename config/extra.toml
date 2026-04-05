@@ -1,0 +1,5 @@
+[[ballsdex.packages]]
+location = "git+https://github.com/faye69/BallsDex-Collector-Pack.git"
+path = "collector"
+enabled = true
+editable = false
