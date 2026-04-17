@@ -1,5 +1,20 @@
+# Collector Package
 [[ballsdex.packages]]
 location = "git+https://github.com/faye69/BallsDex-Collector-Pack.git"
 path = "collector"
 enabled = true
 editable = false
+
+# Broadcast Package
+[[ballsdex.packages]]
+location = "git+https://github.com/Ray-Hsueh/BallsDex-Broadcast-Pack.git"
+path = "broadcast"
+enabled = true
+editable = false
+
+# Boss Package
+#[[ballsdex.packages]]
+#location = "git+https://github.com/HiboMan/BallsDex-Boss-Pack.git"
+#path = "boss"
+#enabled = true
+#editable = false
