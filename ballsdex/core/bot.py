@@ -59,7 +59,6 @@ DEFAULT_PACKAGES = (
     ("info", "ballsdex.packages.info"),
     ("players", "ballsdex.packages.players"),
     ("trade", "ballsdex.packages.trade"),
-    ("report", "ballsdex.packages.report"),
 )
 
 
